@@ -1,0 +1,125 @@
+{
+  "family": "documind-notification-service",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/documind-ecs-execution",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/documind-notification-task",
+  "containerDefinitions": [
+    {
+      "name": "notification-service",
+      "image": "PLACEHOLDER_REPLACED_BY_CI",
+      "essential": true,
+      "portMappings": [
+        {
+          "name": "notification",
+          "containerPort": 8084,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "SPRING_PROFILES_ACTIVE",
+          "value": "aws"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "<REGION>"
+        },
+        {
+          "name": "AUTH_URL",
+          "value": "http://auth:8081"
+        },
+        {
+          "name": "TRACING_ENABLED",
+          "value": "false"
+        },
+        {
+          "name": "SERVER_PORT",
+          "value": "8084"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "<RDS_ENDPOINT>"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "KAFKA_BOOTSTRAP",
+          "value": "<MSK_TLS_BOOTSTRAP_BROKERS>"
+        },
+        {
+          "name": "SPRING_KAFKA_SECURITY_PROTOCOL",
+          "value": "SSL"
+        },
+        {
+          "name": "KAFKA_REPLICAS",
+          "value": "2"
+        },
+        {
+          "name": "SMTP_HOST",
+          "value": "email-smtp.<REGION>.amazonaws.com"
+        },
+        {
+          "name": "SMTP_PORT",
+          "value": "587"
+        },
+        {
+          "name": "SMTP_AUTH",
+          "value": "true"
+        },
+        {
+          "name": "SMTP_STARTTLS",
+          "value": "true"
+        },
+        {
+          "name": "MAIL_FROM",
+          "value": "DocuMind <no-reply@<YOUR_VERIFIED_DOMAIN>>"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:documind/db:password::"
+        },
+        {
+          "name": "SMTP_USERNAME",
+          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:documind/ses:username::"
+        },
+        {
+          "name": "SMTP_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:documind/ses:password::"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget -qO- localhost:8084/actuator/health/liveness || exit 1"
+        ],
+        "interval": 15,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/documind/notification-service",
+          "awslogs-region": "<REGION>",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

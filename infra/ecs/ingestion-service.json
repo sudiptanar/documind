@@ -1,0 +1,109 @@
+{
+  "family": "documind-ingestion-service",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "1024",
+  "memory": "2048",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/documind-ecs-execution",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/documind-ingestion-task",
+  "containerDefinitions": [
+    {
+      "name": "ingestion-service",
+      "image": "PLACEHOLDER_REPLACED_BY_CI",
+      "essential": true,
+      "portMappings": [
+        {
+          "name": "ingestion",
+          "containerPort": 8082,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "SPRING_PROFILES_ACTIVE",
+          "value": "aws"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "<REGION>"
+        },
+        {
+          "name": "AUTH_URL",
+          "value": "http://auth:8081"
+        },
+        {
+          "name": "TRACING_ENABLED",
+          "value": "false"
+        },
+        {
+          "name": "SERVER_PORT",
+          "value": "8082"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "<RDS_ENDPOINT>"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "5432"
+        },
+        {
+          "name": "KAFKA_BOOTSTRAP",
+          "value": "<MSK_TLS_BOOTSTRAP_BROKERS>"
+        },
+        {
+          "name": "SPRING_KAFKA_SECURITY_PROTOCOL",
+          "value": "SSL"
+        },
+        {
+          "name": "KAFKA_REPLICAS",
+          "value": "2"
+        },
+        {
+          "name": "S3_ENDPOINT",
+          "value": ""
+        },
+        {
+          "name": "S3_BUCKET",
+          "value": "documind-uploads-<ACCOUNT_ID>"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:documind/db:password::"
+        },
+        {
+          "name": "OPENAI_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:documind/openai:api_key::"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget -qO- localhost:8082/actuator/health/liveness || exit 1"
+        ],
+        "interval": 15,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/documind/ingestion-service",
+          "awslogs-region": "<REGION>",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

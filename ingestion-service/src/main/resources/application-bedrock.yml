@@ -1,0 +1,13 @@
+# Activate with SPRING_PROFILES_ACTIVE=bedrock. Titan Text Embeddings V2 produces 1024 dimensions,
+# so run with EMBEDDING_DIMENSIONS=1024 on a fresh database (vectors from different models are not comparable).
+spring:
+  ai:
+    model:
+      embedding: bedrock-titan
+    bedrock:
+      aws:
+        region: ${AWS_REGION:us-east-1}
+      titan:
+        embedding:
+          model: amazon.titan-embed-text-v2:0
+          input-type: text

@@ -1,0 +1,122 @@
+server:
+  port: ${SERVER_PORT:8082}
+
+spring:
+  application:
+    name: ingestion-service
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 26MB
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/ingestion_db
+    username: ${DB_USERNAME:documind}
+    password: ${DB_PASSWORD:documind}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    placeholders:
+      embedding_dimensions: ${EMBEDDING_DIMENSIONS:1536}
+  mvc:
+    problemdetails:
+      enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_URL:http://localhost:8081}/.well-known/jwks.json
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      group-id: ingestion-workers
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: com.documind.common.events
+        # embedding a large PDF can take a while; don't let the broker think the consumer died
+        max.poll.interval.ms: 600000
+    listener:
+      ack-mode: record
+      observation-enabled: true
+    template:
+      observation-enabled: true
+  ai:
+    model:
+      # this service only embeds; switch every other model type off
+      chat: none
+      image: none
+      audio:
+        speech: none
+        transcription: none
+      moderation: none
+      embedding: ${EMBEDDING_PROVIDER:openai}
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}   # any OpenAI-compatible endpoint works
+      embedding:
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+    vectorstore:
+      pgvector:
+        initialize-schema: false
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: ${EMBEDDING_DIMENSIONS:1536}
+    retry:
+      max-attempts: 3
+      backoff:
+        initial-interval: 2s
+        multiplier: 2
+        max-interval: 20s
+
+aws:
+  region: ${AWS_REGION:us-east-1}
+  s3:
+    bucket: ${S3_BUCKET:documind-uploads}
+    endpoint: ${S3_ENDPOINT:http://localhost:4566}   # set S3_ENDPOINT= (empty) on AWS
+
+documind:
+  jwt:
+    issuer: documind-auth
+  kafka:
+    partitions: 3
+    replicas: ${KAFKA_REPLICAS:1}
+    retry:
+      max-retries: 3
+      initial-interval: 2s
+      multiplier: 2.0
+  ingestion:
+    concurrency: 3
+    chunk-size-tokens: 800
+    embed-batch-size: 100
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    enabled: ${TRACING_ENABLED:false}
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  pattern:
+    correlation: "[${spring.application.name:},%X{traceId:-},%X{requestId:-}] "

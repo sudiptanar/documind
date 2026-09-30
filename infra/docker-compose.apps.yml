@@ -1,0 +1,94 @@
+# The five DocuMind services (Phase 10). Run together with the infrastructure file:
+#   docker compose -f docker-compose.yml -f docker-compose.apps.yml up -d --build
+# Only the gateway publishes a port: the rest are reachable only inside the compose network,
+# mirroring private subnets on AWS.
+
+x-app: &app
+  restart: unless-stopped
+  env_file:
+    - path: ../.env
+      required: false
+
+x-env: &env
+  SPRING_PROFILES_ACTIVE: docker
+  KAFKA_BOOTSTRAP: kafka:29092
+  AUTH_URL: http://auth:8081
+  S3_ENDPOINT: http://localstack:4566
+  TRACING_ENABLED: "true"
+  OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+
+x-healthcheck: &healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 30
+  start_period: 30s
+
+services:
+  auth:
+    <<: *app
+    image: documind/auth-service:local
+    build: { context: .., args: { MODULE: auth-service } }
+    volumes: ["../secrets:/secrets:ro"]
+    environment:
+      <<: *env
+      JWT_PRIVATE_KEY_PATH: /secrets/jwt-private.pem
+      JWT_PUBLIC_KEY_PATH: /secrets/jwt-public.pem
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- localhost:8081/actuator/health/readiness || exit 1"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  ingestion:
+    <<: *app
+    image: documind/ingestion-service:local
+    build: { context: .., args: { MODULE: ingestion-service } }
+    environment: *env
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- localhost:8082/actuator/health/readiness || exit 1"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      localstack: { condition: service_healthy }
+      auth: { condition: service_healthy }
+
+  query:
+    <<: *app
+    image: documind/query-service:local
+    build: { context: .., args: { MODULE: query-service } }
+    environment: *env
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- localhost:8083/actuator/health/readiness || exit 1"]
+    depends_on:
+      ingestion: { condition: service_healthy }   # ingestion's Flyway creates the vector table
+
+  notification:
+    <<: *app
+    image: documind/notification-service:local
+    build: { context: .., args: { MODULE: notification-service } }
+    environment: *env
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- localhost:8084/actuator/health/readiness || exit 1"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      auth: { condition: service_healthy }
+
+  gateway:
+    <<: *app
+    image: documind/gateway-service:local
+    build: { context: .., args: { MODULE: gateway-service } }
+    ports: ["${GATEWAY_PORT:-8080}:8080"]
+    environment:
+      <<: *env
+      INGESTION_URL: http://ingestion:8082
+      QUERY_URL: http://query:8083
+      NOTIFICATION_URL: http://notification:8084
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "wget -qO- localhost:8080/actuator/health/readiness || exit 1"]
+    depends_on:
+      auth: { condition: service_healthy }

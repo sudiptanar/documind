@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/notification_db
+  mail:
+    host: mailpit
+
+logging:
+  structured:
+    format:
+      console: ecs

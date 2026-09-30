@@ -1,0 +1,88 @@
+{
+  "family": "documind-gateway-service",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/documind-ecs-execution",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/documind-gateway-task",
+  "containerDefinitions": [
+    {
+      "name": "gateway-service",
+      "image": "PLACEHOLDER_REPLACED_BY_CI",
+      "essential": true,
+      "portMappings": [
+        {
+          "name": "gateway",
+          "containerPort": 8080,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "SPRING_PROFILES_ACTIVE",
+          "value": "aws"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "<REGION>"
+        },
+        {
+          "name": "AUTH_URL",
+          "value": "http://auth:8081"
+        },
+        {
+          "name": "TRACING_ENABLED",
+          "value": "false"
+        },
+        {
+          "name": "SERVER_PORT",
+          "value": "8080"
+        },
+        {
+          "name": "INGESTION_URL",
+          "value": "http://ingestion:8082"
+        },
+        {
+          "name": "QUERY_URL",
+          "value": "http://query:8083"
+        },
+        {
+          "name": "NOTIFICATION_URL",
+          "value": "http://notification:8084"
+        },
+        {
+          "name": "CORS_ALLOWED_ORIGINS",
+          "value": "https://<YOUR_FRONTEND_DOMAIN>"
+        }
+      ],
+      "secrets": [],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget -qO- localhost:8080/actuator/health/liveness || exit 1"
+        ],
+        "interval": 15,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/documind/gateway-service",
+          "awslogs-region": "<REGION>",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

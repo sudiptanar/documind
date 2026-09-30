@@ -1,0 +1,93 @@
+{
+  "family": "documind-auth-service",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/documind-ecs-execution",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/documind-auth-task",
+  "containerDefinitions": [
+    {
+      "name": "auth-service",
+      "image": "PLACEHOLDER_REPLACED_BY_CI",
+      "essential": true,
+      "portMappings": [
+        {
+          "name": "auth",
+          "containerPort": 8081,
+          "protocol": "tcp",
+          "appProtocol": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "SPRING_PROFILES_ACTIVE",
+          "value": "aws"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "<REGION>"
+        },
+        {
+          "name": "AUTH_URL",
+          "value": "http://auth:8081"
+        },
+        {
+          "name": "TRACING_ENABLED",
+          "value": "false"
+        },
+        {
+          "name": "SERVER_PORT",
+          "value": "8081"
+        },
+        {
+          "name": "DB_HOST",
+          "value": "<RDS_ENDPOINT>"
+        },
+        {
+          "name": "DB_PORT",
+          "value": "5432"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DB_PASSWORD",
+          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:documind/db:password::"
+        },
+        {
+          "name": "JWT_PRIVATE_KEY",
+          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:documind/jwt:private::"
+        },
+        {
+          "name": "JWT_PUBLIC_KEY",
+          "valueFrom": "arn:aws:secretsmanager:<REGION>:<ACCOUNT_ID>:secret:documind/jwt:public::"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget -qO- localhost:8081/actuator/health/liveness || exit 1"
+        ],
+        "interval": 15,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/documind/auth-service",
+          "awslogs-region": "<REGION>",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

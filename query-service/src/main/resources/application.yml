@@ -1,0 +1,84 @@
+server:
+  port: ${SERVER_PORT:8083}
+
+spring:
+  application:
+    name: query-service
+  datasource:
+    # read-only role on the ingestion database: the vector table is a shared read model (a deliberate trade-off)
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/ingestion_db
+    username: ${DB_USERNAME:query_ro}
+    password: ${DB_PASSWORD:query_ro}
+    hikari:
+      read-only: true
+  mvc:
+    problemdetails:
+      enabled: true
+    async:
+      request-timeout: 120s
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${AUTH_URL:http://localhost:8081}/.well-known/jwks.json
+  ai:
+    model:
+      chat: ${CHAT_PROVIDER:openai}
+      embedding: ${EMBEDDING_PROVIDER:openai}
+      image: none
+      audio:
+        speech: none
+        transcription: none
+      moderation: none
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}   # any OpenAI-compatible endpoint works
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+          temperature: 0.1
+      embedding:
+        options:
+          # must match the model the ingestion service embedded with
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+    vectorstore:
+      pgvector:
+        initialize-schema: false
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: ${EMBEDDING_DIMENSIONS:1536}
+    retry:
+      max-attempts: 3
+      backoff:
+        initial-interval: 1s
+        multiplier: 2
+        max-interval: 10s
+
+documind:
+  jwt:
+    issuer: documind-auth
+  query:
+    default-top-k: 5
+    max-top-k: 20
+    similarity-threshold: ${SIMILARITY_THRESHOLD:0.35}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    enabled: ${TRACING_ENABLED:false}
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  pattern:
+    correlation: "[${spring.application.name:},%X{traceId:-},%X{requestId:-}] "

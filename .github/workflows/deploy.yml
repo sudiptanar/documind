@@ -1,0 +1,68 @@
+name: deploy
+
+# Runs after ci succeeds on main. Authenticates to AWS with OIDC: no long-lived AWS keys in GitHub.
+# One-time setup (see README "Deploying to AWS"): an IAM OIDC provider for token.actions.githubusercontent.com,
+# a role trusted only for this repo's main branch, and the repository secret AWS_DEPLOY_ROLE_ARN.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  CLUSTER: documind
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: production
+    strategy:
+      max-parallel: 1   # roll services one at a time
+      matrix:
+        # auth first (others validate tokens against it), gateway last
+        service: [auth-service, ingestion-service, query-service, notification-service, gateway-service]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        id: image
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/documind/${{ matrix.service }}:${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          docker buildx build --build-arg MODULE=${{ matrix.service }} --platform linux/amd64 -t "$IMAGE" --push .
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Render task definition
+        id: td
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/ecs/${{ matrix.service }}.json
+          container-name: ${{ matrix.service }}
+          image: ${{ steps.image.outputs.image }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.td.outputs.task-definition }}
+          service: ${{ matrix.service }}
+          cluster: ${{ env.CLUSTER }}
+          wait-for-service-stability: true

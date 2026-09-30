@@ -1,0 +1,12 @@
+**/target
+.git
+.idea
+.vscode
+*.iml
+.env
+secrets
+infra
+scripts
+samples
+.github
+docs

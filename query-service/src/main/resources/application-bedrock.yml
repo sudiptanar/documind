@@ -1,0 +1,20 @@
+# Activate with SPRING_PROFILES_ACTIVE=bedrock (plus EMBEDDING_DIMENSIONS=1024, matching ingestion).
+# On ECS the task role authenticates to Bedrock: no API key is stored anywhere.
+spring:
+  ai:
+    model:
+      chat: bedrock-converse
+      embedding: bedrock-titan
+    bedrock:
+      aws:
+        region: ${AWS_REGION:us-east-1}
+      converse:
+        chat:
+          options:
+            # the model ID or inference-profile ID copied from the Bedrock console
+            model: ${BEDROCK_CHAT_MODEL}
+            temperature: 0.1
+      titan:
+        embedding:
+          model: amazon.titan-embed-text-v2:0
+          input-type: text
